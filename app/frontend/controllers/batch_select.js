@@ -4,6 +4,7 @@
     const bar = document.querySelector("[data-batch-bar]");
     const countLabel = document.querySelector("[data-batch-count]");
     const deselectBtn = document.querySelector("[data-batch-deselect]");
+    const deleteForm = document.querySelector("[data-batch-delete-form]");
 
     if (!bar) return;
 
@@ -11,20 +12,19 @@
       return document.querySelectorAll("[data-batch-select-item]");
     }
 
+    function getChecked() {
+      return Array.from(getCheckboxes()).filter((cb) => cb.checked);
+    }
+
     function updateBar() {
       const checkboxes = getCheckboxes();
-      const checked = Array.from(checkboxes).filter((cb) => cb.checked);
+      const checked = getChecked();
       const count = checked.length;
 
-      if (count > 0) {
-        bar.style.display = "block";
-        countLabel.textContent =
-          count + (count === 1 ? " file selected" : " files selected");
-      } else {
-        bar.style.display = "none";
-      }
+      bar.style.display = count > 0 ? "block" : "none";
+      countLabel.textContent =
+        count + (count === 1 ? " file selected" : " files selected");
 
-      // Sync "select all" checkbox
       if (selectAll) {
         selectAll.checked =
           checkboxes.length > 0 && checked.length === checkboxes.length;
@@ -33,14 +33,29 @@
       }
     }
 
-    // Listen for individual checkbox changes
+    // Individual checkbox changes
     document.addEventListener("change", (e) => {
       if (e.target.matches("[data-batch-select-item]")) {
         updateBar();
       }
     });
 
-    // Select all / deselect all toggle
+    // Click filename to toggle its checkbox
+    document.addEventListener("click", (e) => {
+      const toggle = e.target.closest("[data-batch-select-toggle]");
+      if (!toggle) return;
+
+      const uploadId = toggle.dataset.batchSelectToggle;
+      const checkbox = document.querySelector(
+        '[data-batch-select-item][data-upload-id="' + uploadId + '"]',
+      );
+      if (checkbox) {
+        checkbox.checked = !checkbox.checked;
+        updateBar();
+      }
+    });
+
+    // Select all toggle
     if (selectAll) {
       selectAll.addEventListener("change", () => {
         const checkboxes = getCheckboxes();
@@ -51,15 +66,44 @@
       });
     }
 
-    // Deselect all button in the bar
+    // Deselect all button
     if (deselectBtn) {
       deselectBtn.addEventListener("click", () => {
-        const checkboxes = getCheckboxes();
-        checkboxes.forEach((cb) => {
+        getCheckboxes().forEach((cb) => {
           cb.checked = false;
         });
         if (selectAll) selectAll.checked = false;
         updateBar();
+      });
+    }
+
+    // Confirmation before batch delete
+    if (deleteForm) {
+      deleteForm.addEventListener("submit", (e) => {
+        const checked = getChecked();
+        if (checked.length === 0) {
+          e.preventDefault();
+          return;
+        }
+
+        // Build a list of filenames from the row next to each checkbox
+        const names = checked.map((cb) => {
+          const row = cb.closest("[class*='BorderBox']") || cb.parentElement;
+          const nameEl = row.querySelector("[data-batch-select-toggle]");
+          return nameEl ? nameEl.textContent.trim() : cb.value;
+        });
+
+        const message =
+          "Delete " +
+          checked.length +
+          (checked.length === 1 ? " file" : " files") +
+          "?\n\n" +
+          names.map((n) => "  • " + n).join("\n") +
+          "\n\nThis cannot be undone.";
+
+        if (!confirm(message)) {
+          e.preventDefault();
+        }
       });
     }
   }

@@ -66,7 +66,6 @@ class Components::Uploads::Index < Components::Base
 
   def uploads_list
     if uploads.any?
-      # Select all toggle
       div(style: "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 4px 0;") do
         input(
           type: "checkbox",
@@ -88,8 +87,7 @@ class Components::Uploads::Index < Components::Base
                 name: "ids[]",
                 value: upload.id,
                 form: "batch-delete-form",
-                class: "batch-select-checkbox",
-                data: { batch_select_item: true },
+                data: { batch_select_item: true, upload_id: upload.id },
                 style: "margin-top: 6px; cursor: pointer;"
               )
               div(style: "flex: 1; min-width: 0;") do
@@ -133,16 +131,15 @@ class Components::Uploads::Index < Components::Base
   end
 
   def batch_delete_bar
-    div(id: "batch-delete-bar", data: { batch_bar: true }, style: "display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--bgColor-danger-muted, #FFEBE9); border-top: 1px solid var(--borderColor-danger-muted, #ffcecb); padding: 12px 24px; z-index: 100;") do
-      div(style: "max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center;") do
-        span(data: { batch_count: true }, style: "font-size: 14px; font-weight: 500;") { "0 files selected" }
-        div(style: "display: flex; gap: 8px;") do
-          button(type: "button", data: { batch_deselect: true }, class: "btn btn-sm") { "Deselect all" }
-          form_with url: destroy_batch_uploads_path, method: :delete, id: "batch-delete-form", data: { turbo_confirm: "Are you sure you want to delete the selected files? This cannot be undone." } do
-            button(type: "submit", class: "btn btn-sm btn-danger") do
-              render Primer::Beta::Octicon.new(icon: :trash, mr: 1)
-              plain "Delete selected"
-            end
+    div(id: "batch-delete-bar", data: { batch_bar: true }, style: "display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--bgColor-default, #fff); border: 1px solid var(--borderColor-default, #d0d7de); border-radius: 12px; padding: 12px 20px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-width: 320px; max-width: 600px;") do
+      div(style: "display: flex; align-items: center; gap: 16px;") do
+        span(data: { batch_count: true }, style: "font-size: 14px; font-weight: 600; white-space: nowrap;") { "0 selected" }
+        div(style: "flex: 1;")
+        button(type: "button", data: { batch_deselect: true }, class: "btn btn-sm", style: "white-space: nowrap;") { "Deselect" }
+        form_with url: destroy_batch_uploads_path, method: :delete, id: "batch-delete-form", data: { batch_delete_form: true } do
+          button(type: "submit", class: "btn btn-sm btn-danger", style: "white-space: nowrap;") do
+            render Primer::Beta::Octicon.new(icon: :trash, mr: 1)
+            plain "Delete"
           end
         end
       end
