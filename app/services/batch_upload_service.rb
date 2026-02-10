@@ -88,10 +88,28 @@ class BatchUploadService
       upload.destroy!
     end
 
-    # Remove destroyed uploads from the success list
-    destroyed_ids = failed.select { |f| f.reason.start_with?("Removed:") }.map(&:filename)
-    uploads.reject! { |u| destroyed_ids.include?(u.filename.to_s) }
-  end
+    def enforce_quota_after_upload!(uploads, failed)
+      actual_total = @user.reload.total_storage_bytes
+      max_storage = @policy.max_total_storage
+
+      return if actual_total <= max_storage
+
+      overage = actual_total - max_storage
+      reclaimed = 0
+      destroyed_ids = []
+
+      uploads.reverse.each do |upload|
+        break if reclaimed >= overage
+
+        reclaimed += upload.byte_size
+        destroyed_ids << upload.id
+        failed << FailedUpload[upload.filename.to_s, "Removed: concurrent uploads exceeded quota"]
+        upload.destroy!
+      end
+
+      uploads.reject! { |u| destroyed_ids.include?(u.id) }
+    end
+
 
   def create_upload(file)
     content_type = Marcel::MimeType.for(file.tempfile, name: file.original_filename) ||
