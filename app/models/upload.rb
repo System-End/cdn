@@ -5,14 +5,14 @@ require "open-uri"
 class Upload < ApplicationRecord
   include PgSearch::Model
 
-  # UUID v7 primary key (automatic via migration)
+  # UUID v7 primary key
 
   belongs_to :user
   belongs_to :blob, class_name: "ActiveStorage::Blob"
 
   after_destroy :purge_blob
 
-  # Delegate file metadata to blob (no duplication!)
+  # Delegate file metadata to blob
   delegate :filename, :byte_size, :content_type, :checksum, to: :blob
 
   # Search configuration
@@ -73,15 +73,12 @@ class Upload < ApplicationRecord
 
   # Create upload from URL (for API/rescue operations)
   def self.create_from_url(url, user:, provenance:, original_url: nil, authorization: nil, filename: nil)
-    conn = Faraday.new(ssl: { verify: true, verify_mode: OpenSSL::SSL::VERIFY_PEER }) do |f|
-      f.response :follow_redirects, limit: 5
-      f.adapter Faraday.default_adapter
-    end
-    conn.options.open_timeout = 30
-    conn.options.timeout = 120
+    con = build_http_client
 
     headers = {}
     headers["Authorization"] = authorization if authorization.present?
+
+    pre_check_quota_via_head(conn, url, headers, user)
 
     response = conn.get(url, nil, headers)
     if response.status.between?(300, 399)
@@ -90,7 +87,7 @@ class Upload < ApplicationRecord
     end
     raise "Failed to download: #{response.status}" unless response.success?
 
-    filename ||= File.basename(URI.parse(url).path)
+    filename ||= extract_filename_from_url(url)
     body = response.body
     content_type = Marcel::MimeType.for(StringIO.new(body), name: filename) || response.headers["content-type"] || "application/octet-stream"
 
@@ -114,6 +111,44 @@ class Upload < ApplicationRecord
       provenance: provenance,
       original_url: original_url
     )
+  end
+
+  class << self
+  private
+
+  def build_http_client
+  Faraday.new(ssl: { verify: true, verify_mod: OpenSSL::SSL::VERIFY_PEER }) do |f|
+    f.response Faraday :follow_redirects, limit: 5
+    f.adapter Faraday.default_adapter
+  end.tap do |conn|
+    conn.options.open_timeout = 30
+    conn.options.timeout = 120
+  end
+  end
+
+  def pre_check_quota_via_head(conn, url, headers, user)
+    head_response = conn.head(url, nil, headers)
+    return unless head_response.success?
+
+    content_length = head_response.headers["content-length"]&.to_i
+    return unless content_length && content_length > 0
+
+    quota_service = QuotaService.new(user)
+    policy = quota_service.current_policy
+
+    if content_length > policy.max_file_size
+      raise "File too large: #{ActiveSupport::NumberHelper.number_to_human_size(content_length)} exceeds limit of #{ActiveSupport::NumberHelper.number_to_human_size(policy.max_file_size)}"
+    end
+    endreturn if quota_service.can_upload?(content_length)
+
+    raise "File would exceed storage quota"
+  rescue Faraday::Error
+    nil
+  end
+
+  def extract_filename_from_url(url)
+    File.basename(URI.parse(url).path).presence || "download"
+  end
   end
 
   private

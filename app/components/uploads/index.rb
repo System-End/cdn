@@ -37,7 +37,7 @@ class Components::Uploads::Index < Components::Base
 
       label(for: "dropzone-file-input", class: "btn btn-primary", style: "cursor: pointer;") do
         render Primer::Beta::Octicon.new(icon: :upload, mr: 1)
-        plain "Upload File"
+        plain "Upload Files"
       end
     end
   end

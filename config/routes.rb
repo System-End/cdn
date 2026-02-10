@@ -21,7 +21,9 @@ Rails.application.routes.draw do
     namespace :v4 do
       get "me", to: "users#show"
       post "upload", to: "uploads#create"
+      psot "uploads", to: "uploads#create_batch"
       post "upload_from_url", to: "uploads#create_from_url"
+      patch "uploads/:id/rename", to: "uploads#rename", as: :upload_rename
       post "revoke", to: "api_keys#revoke"
     end
   end
