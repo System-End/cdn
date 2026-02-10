@@ -5,17 +5,13 @@ require "open-uri"
 class Upload < ApplicationRecord
   include PgSearch::Model
 
-  # UUID v7 primary key
-
   belongs_to :user
   belongs_to :blob, class_name: "ActiveStorage::Blob"
 
   after_destroy :purge_blob
 
-  # Delegate file metadata to blob
   delegate :filename, :byte_size, :content_type, :checksum, to: :blob
 
-  # Search configuration
   pg_search_scope :search_by_filename,
     associated_against: {
       blob: :filename
@@ -32,11 +28,9 @@ class Upload < ApplicationRecord
     },
     using: { tsearch: { prefix: true } }
 
-  # Aliases for consistency
   alias_method :file_size, :byte_size
   alias_method :mime_type, :content_type
 
-  # Provenance enum
   enum :provenance, {
     slack: "slack",
     web: "web",
@@ -56,13 +50,11 @@ class Upload < ApplicationRecord
     ActiveSupport::NumberHelper.number_to_human_size(byte_size)
   end
 
-  # Direct URL to public R2 bucket
   def assets_url
     host = ENV.fetch("CDN_ASSETS_HOST", "cdn.hackclub-assets.com")
     "https://#{host}/#{blob.key}"
   end
 
-  # Get CDN URL (uses external uploads controller)
   def cdn_url
     Rails.application.routes.url_helpers.external_upload_url(
       id:,
@@ -71,9 +63,20 @@ class Upload < ApplicationRecord
     )
   end
 
-  # Create upload from URL (for API/rescue operations)
+  # Rename the display filename (storage key stays the same)
+  def rename!(new_filename)
+    sanitized = ActiveStorage::Filename.new(new_filename).sanitized
+
+    # Preserve the original extension if the user didn't provide one
+    original_ext = File.extname(blob.filename.to_s)
+    new_ext = File.extname(sanitized)
+    sanitized = "#{sanitized}#{original_ext}" if new_ext.blank? && original_ext.present?
+
+    blob.update!(filename: sanitized)
+  end
+
   def self.create_from_url(url, user:, provenance:, original_url: nil, authorization: nil, filename: nil)
-    con = build_http_client
+    conn = build_http_client
 
     headers = {}
     headers["Authorization"] = authorization if authorization.present?
@@ -89,9 +92,10 @@ class Upload < ApplicationRecord
 
     filename ||= extract_filename_from_url(url)
     body = response.body
-    content_type = Marcel::MimeType.for(StringIO.new(body), name: filename) || response.headers["content-type"] || "application/octet-stream"
+    content_type = Marcel::MimeType.for(StringIO.new(body), name: filename) ||
+                   response.headers["content-type"] ||
+                   "application/octet-stream"
 
-    # Pre-generate upload ID for predictable storage path
     upload_id = SecureRandom.uuid_v7
     sanitized_filename = ActiveStorage::Filename.new(filename).sanitized
     storage_key = "#{upload_id}/#{sanitized_filename}"
@@ -114,41 +118,43 @@ class Upload < ApplicationRecord
   end
 
   class << self
-  private
+    private
 
-  def build_http_client
-  Faraday.new(ssl: { verify: true, verify_mod: OpenSSL::SSL::VERIFY_PEER }) do |f|
-    f.response Faraday :follow_redirects, limit: 5
-    f.adapter Faraday.default_adapter
-  end.tap do |conn|
-    conn.options.open_timeout = 30
-    conn.options.timeout = 120
-  end
-  end
-
-  def pre_check_quota_via_head(conn, url, headers, user)
-    head_response = conn.head(url, nil, headers)
-    return unless head_response.success?
-
-    content_length = head_response.headers["content-length"]&.to_i
-    return unless content_length && content_length > 0
-
-    quota_service = QuotaService.new(user)
-    policy = quota_service.current_policy
-
-    if content_length > policy.max_file_size
-      raise "File too large: #{ActiveSupport::NumberHelper.number_to_human_size(content_length)} exceeds limit of #{ActiveSupport::NumberHelper.number_to_human_size(policy.max_file_size)}"
+    def build_http_client
+      Faraday.new(ssl: { verify: true, verify_mode: OpenSSL::SSL::VERIFY_PEER }) do |f|
+        f.response :follow_redirects, limit: 5
+        f.adapter Faraday.default_adapter
+      end.tap do |conn|
+        conn.options.open_timeout = 30
+        conn.options.timeout = 120
+      end
     end
-    endreturn if quota_service.can_upload?(content_length)
 
-    raise "File would exceed storage quota"
-  rescue Faraday::Error
-    nil
-  end
+    def pre_check_quota_via_head(conn, url, headers, user)
+      head_response = conn.head(url, nil, headers)
+      return unless head_response.success?
 
-  def extract_filename_from_url(url)
-    File.basename(URI.parse(url).path).presence || "download"
-  end
+      content_length = head_response.headers["content-length"]&.to_i
+      return unless content_length && content_length > 0
+
+      quota_service = QuotaService.new(user)
+      policy = quota_service.current_policy
+
+      if content_length > policy.max_file_size
+        raise "File too large: #{ActiveSupport::NumberHelper.number_to_human_size(content_length)} " \
+              "exceeds limit of #{ActiveSupport::NumberHelper.number_to_human_size(policy.max_file_size)}"
+      end
+
+      return if quota_service.can_upload?(content_length)
+
+      raise "File would exceed storage quota"
+    rescue Faraday::Error
+      nil
+    end
+
+    def extract_filename_from_url(url)
+      File.basename(URI.parse(url).path).presence || "download"
+    end
   end
 
   private

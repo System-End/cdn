@@ -87,7 +87,7 @@ class Components::Uploads::Index < Components::Base
         if query.present?
           "Try a different search query"
         else
-          "Drag and drop files anywhere on this page, or use the Upload button"
+          "Drag and drop files anywhere on this page, or use the Upload button (up to 40 files at once)"
         end
       end
     end
@@ -101,7 +101,7 @@ class Components::Uploads::Index < Components::Base
 
   def dropzone_form
     form_with url: uploads_path, method: :post, multipart: true, data: { dropzone_form: true } do
-      input(type: "file", name: "file", id: "dropzone-file-input", data: { dropzone_input: true }, style: "display: none;")
+      input(type: "file", name: "files[]", id: "dropzone-file-input", multiple: true, data: { dropzone_input: true }, style: "display: none;")
     end
   end
 end

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class UploadsController < ApplicationController
-  before_action :set_upload, only: [ :destroy ]
+  before_action :set_upload, only: [ :update, :destroy ]
 
   def index
     @uploads = current_user.uploads.includes(:blob).recent
@@ -31,78 +31,67 @@ class UploadsController < ApplicationController
 
     flash_message = build_flash_message(result)
 
-    if result.uplaods.any?
+    if result.uploads.any?
       redirect_to uploads_path, notice: flash_message
     else
-    redirect_to uploads_path, alert: flash_message
+      redirect_to uploads_path, alert: flash_message
     end
-  rescue StandardError => e
-    event = Sentry.capture_exception(e)
-    redirect_to uploads_path, alert: "Upload failed: #{e.message} (Error ID: #{event&.event_id})"
-    end
-
-    def destroy
-      authorize @upload
-
-      @upload.destroy!
-      redirect_back fallback_location: uploads_path, notice: "Upload deleted successfully."
-    rescue Pundit::NotAuthorizedError
-      redirect_back fallback_location: uploads_path, alert: "You are not authorized to delete this upload."
-    end
-
-    private
-
-    def extract_uploaded_files
-      files=[]
-
-      # mult files via files[] param
-      if params[:files].present?
-        files.concat(Array(params[:files]))
-      end
-
-      if params[:file].present?
-        files << params[:file]
-    end
-
-    files.reject(&:blank?)
-    end
-
-
-    content_type = Marcel::MimeType.for(uploaded_file.tempfile, name: uploaded_file.original_filename) || uploaded_file.content_type || "application/octet-stream"
-
-
-
-    redirect_to uploads_path, notice: "File uploaded successfully!"
   rescue StandardError => e
     event = Sentry.capture_exception(e)
     redirect_to uploads_path, alert: "Upload failed: #{e.message} (Error ID: #{event&.event_id})"
   end
 
-  files.reject(&:blank?)
+  def update
+    authorize @upload
+
+    new_filename = params[:filename].to_s.strip
+    if new_filename.blank?
+      redirect_to uploads_path, alert: "Filename can't be blank."
+      return
+    end
+
+    @upload.rename!(new_filename)
+    redirect_to uploads_path, notice: "Renamed to #{@upload.filename}"
+  rescue Pundit::NotAuthorizedError
+    redirect_to uploads_path, alert: "You are not authorized to rename this upload."
+  end
+
+  def destroy
+    authorize @upload
+
+    @upload.destroy!
+    redirect_back fallback_location: uploads_path, notice: "Upload deleted successfully."
+  rescue Pundit::NotAuthorizedError
+    redirect_back fallback_location: uploads_path, alert: "You are not authorized to delete this upload."
+  end
+
+  private
+
+  def extract_uploaded_files
+    files = []
+    files.concat(Array(params[:files])) if params[:files].present?
+    files << params[:file] if params[:file].present?
+    files.reject(&:blank?)
   end
 
   def build_flash_message(result)
-    messages = []
+    parts = []
+
     if result.uploads.any?
-      messages << "#{result.uploads.size} file(s) uploaded successfully"
+      count = result.uploads.size
+      filenames = result.uploads.map { |u| u.filename.to_s }.join(", ")
+      parts << "Uploaded #{count} #{'file'.pluralize(count)}: #{filenames}"
     end
 
     if result.failed.any?
-      messages << "#{result.failed.size} file(s) failed to upload"
+      failures = result.failed.map { |f| "#{f.filename} (#{f.reason})" }.join("; ")
+      parts << "Failed: #{failures}"
     end
 
-    messages.join(", ")
-  end
-
-  if result.failed.any?
-    failures = result.failed.map { |f| "#{f.filename} (#{f.reason})" }.join(", ")
-  parts << "Failed: #{failures}"
-  end
-
-  parts.join(". ")
+    parts.join(". ")
   end
 
   def set_upload
-    @upload = current_user.uploads.find(params[:id])
+    @upload = Upload.find(params[:id])
   end
 end
