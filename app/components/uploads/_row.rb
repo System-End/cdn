@@ -25,13 +25,15 @@ class Components::Uploads::Row < Components::Base
   attr_reader :upload, :compact, :admin
 
   def compact_content
-    div(style: "flex: 1; min-width: 0; cursor: pointer;", data: { batch_select_toggle: upload.id }) do
-      div(style: "font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;") do
-        render Primer::Beta::Octicon.new(icon: file_icon_for(upload.content_type), size: :small, mr: 1)
-        plain upload.filename.to_s
-      end
-      div(style: "font-size: 12px; color: var(--fgColor-muted, #656d76); margin-top: 4px;") do
-        plain "#{upload.human_file_size} • #{time_ago_in_words(upload.created_at)} ago"
+    div(style: "flex: 1; min-width: 0;") do
+      div(style: "display: inline-block; cursor: pointer; max-width: 100%;", data: { batch_select_toggle: upload.id }) do
+        div(style: "font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;") do
+          render Primer::Beta::Octicon.new(icon: file_icon_for(upload.content_type), size: :small, mr: 1)
+          plain upload.filename.to_s
+        end
+        div(style: "font-size: 12px; color: var(--fgColor-muted, #656d76); margin-top: 4px;") do
+          plain "#{upload.human_file_size} • #{time_ago_in_words(upload.created_at)} ago"
+        end
       end
     end
 
@@ -47,16 +49,18 @@ class Components::Uploads::Row < Components::Base
   end
 
   def full_content
-    div(style: "flex: 1; min-width: 0; cursor: pointer;", data: { batch_select_toggle: upload.id }) do
-      div(style: "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; min-width: 0;") do
-        render Primer::Beta::Octicon.new(icon: file_icon_for(upload.content_type), size: :small)
-        div(style: "flex: 1; min-width: 0; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;") do
-          plain upload.filename.to_s
+    div(style: "flex: 1; min-width: 0;") do
+      div(style: "display: inline-block; cursor: pointer; max-width: 100%;", data: { batch_select_toggle: upload.id }) do
+        div(style: "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; min-width: 0;") do
+          render Primer::Beta::Octicon.new(icon: file_icon_for(upload.content_type), size: :small)
+          div(style: "font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;") do
+            plain upload.filename.to_s
+          end
+          render(Primer::Beta::Label.new(scheme: :secondary)) { plain upload.provenance.titleize }
         end
-        render(Primer::Beta::Label.new(scheme: :secondary)) { plain upload.provenance.titleize }
-      end
-      div(style: "font-size: 12px; color: var(--fgColor-muted, #656d76);") do
-        plain "#{upload.human_file_size} • #{upload.content_type} • #{time_ago_in_words(upload.created_at)} ago"
+        div(style: "font-size: 12px; color: var(--fgColor-muted, #656d76);") do
+          plain "#{upload.human_file_size} • #{upload.content_type} • #{time_ago_in_words(upload.created_at)} ago"
+        end
       end
     end
 
