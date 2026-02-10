@@ -108,6 +108,28 @@ module API
         render json: { error: "Rename failed: #{e.message}" }, status: :unprocessable_entity
       end
 
+      # DELETE /api/v4/uploads/batch
+      def destroy_batch
+        ids = Array(params[:ids]).reject(&:blank?)
+
+        if ids.empty?
+          render json: { error: "Missing ids[] parameter" }, status: :bad_request
+          return
+        end
+
+        uploads = current_user.uploads.where(id: ids).includes(:blob)
+        found_ids = uploads.map(&:id)
+        not_found_ids = ids - found_ids
+
+        deleted = uploads.map { |u| { id: u.id, filename: u.filename.to_s } }
+        uploads.destroy_all
+
+        response = { deleted: deleted }
+        response[:not_found] = not_found_ids if not_found_ids.any?
+
+        render json: response, status: :ok
+      end
+
       private
 
       def check_quota

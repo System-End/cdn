@@ -65,6 +65,23 @@ class UploadsController < ApplicationController
     redirect_back fallback_location: uploads_path, alert: "You are not authorized to delete this upload."
   end
 
+  def destroy_batch
+    ids = Array(params[:ids]).reject(&:blank?)
+
+    if ids.empty?
+      redirect_to uploads_path, alert: "No files selected."
+      return
+    end
+
+    uploads = current_user.uploads.where(id: ids)
+    count = uploads.size
+    filenames = uploads.includes(:blob).map { |u| u.filename.to_s }
+
+    uploads.destroy_all
+
+    redirect_to uploads_path, notice: "Deleted #{count} #{'file'.pluralize(count)}: #{filenames.join(', ')}"
+  end
+
   private
 
   def extract_uploaded_files
